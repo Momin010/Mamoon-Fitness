@@ -27,3 +27,7 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
         detectSessionInUrl: false,
     },
 });
+
+export const isSupabaseConfigured = () => {
+    return !!supabaseUrl && !!supabaseAnonKey;
+};

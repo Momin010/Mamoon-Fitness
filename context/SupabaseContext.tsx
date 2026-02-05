@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { User, Session } from '@supabase/supabase-js';
 
 interface SupabaseContextType {
     user: User | null;
     session: Session | null;
     isLoading: boolean;
+    isConfigured: boolean;
     signIn: (email: string, password: string) => Promise<{ error: any }>;
     signUp: (email: string, password: string, name: string) => Promise<{ error: any }>;
     signOut: () => Promise<void>;
@@ -18,60 +19,64 @@ export const SupabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const [user, setUser] = useState<User | null>(null);
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isConfigured] = useState(() => isSupabaseConfigured());
 
     useEffect(() => {
+        if (!isConfigured) {
+            setIsLoading(false);
+            return;
+        }
+
         // Get initial session
         supabase.auth.getSession().then(({ data: { session } }) => {
-            console.log('Supabase session fetched:', !!session);
             setSession(session);
             setUser(session?.user ?? null);
             setIsLoading(false);
         });
 
         // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            console.log('Supabase auth event:', event, !!session);
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session);
             setUser(session?.user ?? null);
         });
 
         return () => subscription.unsubscribe();
-    }, []);
+    }, [isConfigured]);
 
     const signIn = useCallback(async (email: string, password: string) => {
-        const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password
-        });
+        if (!isConfigured) return { error: new Error('Supabase not configured') };
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
         return { error };
-    }, []);
+    }, [isConfigured]);
 
     const signUp = useCallback(async (email: string, password: string, name: string) => {
+        if (!isConfigured) return { error: new Error('Supabase not configured') };
         const { error } = await supabase.auth.signUp({
             email,
             password,
-            options: {
-                data: {
-                    name
-                }
-            }
+            options: { data: { name } }
         });
         return { error };
-    }, []);
+    }, [isConfigured]);
 
     const signOut = useCallback(async () => {
+        if (!isConfigured) return;
         await supabase.auth.signOut();
-    }, []);
+        setSession(null);
+        setUser(null);
+    }, [isConfigured]);
 
     const resetPassword = useCallback(async (email: string) => {
+        if (!isConfigured) return { error: new Error('Supabase not configured') };
         const { error } = await supabase.auth.resetPasswordForEmail(email);
         return { error };
-    }, []);
+    }, [isConfigured]);
 
     const value = {
         user,
         session,
         isLoading,
+        isConfigured,
         signIn,
         signUp,
         signOut,
